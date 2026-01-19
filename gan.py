@@ -7,6 +7,9 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import numpy as np
+from datetime import datetime
+import matplotlib.pyplot as plt
+import csv
 
 # ---------------------------
 # Dataset
@@ -115,17 +118,79 @@ def evaluate_images(D, image_dir, device):
         transforms.Normalize([0.5]*3, [0.5]*3),
     ])
 
-    scores = []
+    results = []  # (filename, score)
 
     D.eval()
     with torch.no_grad():
-        for img_path in glob.glob(os.path.join(image_dir, "*")):
+        for img_path in sorted(glob.glob(os.path.join(image_dir, "*"))):
+            if not img_path.lower().endswith((".png", ".jpg", ".jpeg")):
+                continue
+
             img = Image.open(img_path).convert("RGB")
             img = transform(img).unsqueeze(0).to(device)
             score = torch.sigmoid(D(img)).item()
-            scores.append(score)
 
-    return np.array(scores)
+            fname = os.path.basename(img_path)
+            results.append((fname, score))
+
+    return results
+
+
+def save_scores(results, out_path):
+    with open(out_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["filename", "d_score"])
+        for r in results:
+            writer.writerow(r)
+
+
+def save_evaluation_figure(real_scores, fake_scores, out_path):
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+
+    # ---- Histogram ----
+    axs[0, 0].hist(real_scores, bins=20, alpha=0.7, label="Real", color="green")
+    axs[0, 0].hist(fake_scores, bins=20, alpha=0.7, label="Fake", color="red")
+    axs[0, 0].set_title("Discriminator Score Distribution")
+    axs[0, 0].set_xlabel("D-score")
+    axs[0, 0].set_ylabel("Frequency")
+    axs[0, 0].legend()
+
+    # ---- Boxplot ----
+    axs[0, 1].boxplot(
+        [real_scores, fake_scores],
+        labels=["Real", "Fake"],
+        showfliers=True
+    )
+    axs[0, 1].set_title("D-score Boxplot Comparison")
+    axs[0, 1].set_ylabel("D-score")
+
+    # ---- Per-image scatter ----
+    axs[1, 0].scatter(range(len(real_scores)), real_scores, alpha=0.7, label="Real")
+    axs[1, 0].scatter(range(len(fake_scores)), fake_scores, alpha=0.7, label="Fake")
+    axs[1, 0].set_title("Per-image D-scores")
+    axs[1, 0].set_xlabel("Image Index")
+    axs[1, 0].set_ylabel("D-score")
+    axs[1, 0].legend()
+
+    # ---- Summary text ----
+    gap = real_scores.mean() - fake_scores.mean()
+    text = (
+        "EVALUATION SUMMARY\n"
+        "=========================\n\n"
+        f"Real mean D-score : {real_scores.mean():.4f} ± {real_scores.std():.4f}\n"
+        f"Fake mean D-score : {fake_scores.mean():.4f} ± {fake_scores.std():.4f}\n"
+        f"Mean gap (R − F)  : {gap:.4f}\n\n"
+        "Interpretation:\n"
+        "- Higher real score = discriminator confidence\n"
+        "- Smaller gap = better inpainting realism\n"
+    )
+
+    axs[1, 1].axis("off")
+    axs[1, 1].text(0.05, 0.95, text, va="top", ha="left", fontsize=11)
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
 
 
 # ---------------------------
@@ -135,12 +200,44 @@ if __name__ == "__main__":
     real_dir = "real_backgrounds"
     fake_dir = "inpainted_backgrounds"
 
+    # ---- train ----
     D, device = train_discriminator(real_dir, fake_dir)
 
-    real_scores = evaluate_images(D, real_dir, device)
-    fake_scores = evaluate_images(D, fake_dir, device)
+    # ---- evaluate ----
+    real_results = evaluate_images(D, real_dir, device)
+    fake_results = evaluate_images(D, fake_dir, device)
 
+    real_scores = np.array([s for _, s in real_results])
+    fake_scores = np.array([s for _, s in fake_results])
+
+    # ---- create run folder ----
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_dir = os.path.join("results", f"run_{run_id}")
+    os.makedirs(out_dir, exist_ok=True)
+
+    # ---- save data ----
+    save_scores(real_results, os.path.join(out_dir, "real_scores.csv"))
+    save_scores(fake_results, os.path.join(out_dir, "fake_scores.csv"))
+
+    torch.save(D.state_dict(), os.path.join(out_dir, "discriminator_only.pth"))
+
+    # ---- summary ----
+    with open(os.path.join(out_dir, "summary.txt"), "w") as f:
+        f.write("DISCRIMINATOR EVALUATION SUMMARY\n")
+        f.write("=" * 35 + "\n\n")
+        f.write(f"Real mean D-score: {real_scores.mean():.4f} ± {real_scores.std():.4f}\n")
+        f.write(f"Fake mean D-score: {fake_scores.mean():.4f} ± {fake_scores.std():.4f}\n")
+        f.write(f"Mean gap (Real - Fake): {(real_scores.mean() - fake_scores.mean()):.4f}\n")
+
+    save_evaluation_figure(
+        real_scores,
+        fake_scores,
+        os.path.join(out_dir, "evaluation_figure.png")
+    )
+
+    # ---- console output ----
     print("\nEVALUATION RESULTS")
     print("------------------")
     print(f"Real mean D-score: {real_scores.mean():.3f} ± {real_scores.std():.3f}")
     print(f"Fake mean D-score: {fake_scores.mean():.3f} ± {fake_scores.std():.3f}")
+    print(f"Results saved to: {out_dir}")
