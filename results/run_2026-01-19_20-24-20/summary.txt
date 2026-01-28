@@ -1,0 +1,6 @@
+DISCRIMINATOR EVALUATION SUMMARY
+===================================
+
+Real mean D-score: 0.0407 ± 0.0005
+Fake mean D-score: 0.0344 ± 0.0005
+Mean gap (Real - Fake): 0.0063
