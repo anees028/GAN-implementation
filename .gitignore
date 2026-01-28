@@ -3,3 +3,10 @@
 venv/
 ENV/
 env/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]   
+
+# Ignore descriminator files
+*.pth

@@ -11,6 +11,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import csv
 
+
 # ---------------------------
 # Dataset
 # ---------------------------
@@ -48,16 +49,13 @@ class Discriminator(nn.Module):
         self.net = nn.Sequential(
             nn.Conv2d(3, 32, 4, 2, 1),
             nn.LeakyReLU(0.2),
-
             nn.Conv2d(32, 64, 4, 2, 1),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2),
-
             nn.Conv2d(64, 128, 4, 2, 1),
             nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2),
-
-            nn.Conv2d(128, 1, 4, 1, 0)
+            nn.Conv2d(128, 1, 4, 1, 0),
         )
 
     def forward(self, x):
@@ -71,11 +69,13 @@ class Discriminator(nn.Module):
 def train_discriminator(real_dir, fake_dir, epochs=30, batch_size=16):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5]*3, [0.5]*3),
-    ])
+    transform = transforms.Compose(
+        [
+            transforms.Resize((128, 128)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5] * 3, [0.5] * 3),
+        ]
+    )
 
     dataset = RealFakeDataset(real_dir, fake_dir, transform)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -112,11 +112,13 @@ def train_discriminator(real_dir, fake_dir, epochs=30, batch_size=16):
 # Evaluation
 # ---------------------------
 def evaluate_images(D, image_dir, device):
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5]*3, [0.5]*3),
-    ])
+    transform = transforms.Compose(
+        [
+            transforms.Resize((128, 128)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5] * 3, [0.5] * 3),
+        ]
+    )
 
     results = []  # (filename, score)
 
@@ -157,9 +159,7 @@ def save_evaluation_figure(real_scores, fake_scores, out_path):
 
     # ---- Boxplot ----
     axs[0, 1].boxplot(
-        [real_scores, fake_scores],
-        labels=["Real", "Fake"],
-        showfliers=True
+        [real_scores, fake_scores], labels=["Real", "Fake"], showfliers=True
     )
     axs[0, 1].set_title("D-score Boxplot Comparison")
     axs[0, 1].set_ylabel("D-score")
@@ -225,14 +225,18 @@ if __name__ == "__main__":
     with open(os.path.join(out_dir, "summary.txt"), "w") as f:
         f.write("DISCRIMINATOR EVALUATION SUMMARY\n")
         f.write("=" * 35 + "\n\n")
-        f.write(f"Real mean D-score: {real_scores.mean():.4f} ± {real_scores.std():.4f}\n")
-        f.write(f"Fake mean D-score: {fake_scores.mean():.4f} ± {fake_scores.std():.4f}\n")
-        f.write(f"Mean gap (Real - Fake): {(real_scores.mean() - fake_scores.mean()):.4f}\n")
+        f.write(
+            f"Real mean D-score: {real_scores.mean():.4f} ± {real_scores.std():.4f}\n"
+        )
+        f.write(
+            f"Fake mean D-score: {fake_scores.mean():.4f} ± {fake_scores.std():.4f}\n"
+        )
+        f.write(
+            f"Mean gap (Real - Fake): {(real_scores.mean() - fake_scores.mean()):.4f}\n"
+        )
 
     save_evaluation_figure(
-        real_scores,
-        fake_scores,
-        os.path.join(out_dir, "evaluation_figure.png")
+        real_scores, fake_scores, os.path.join(out_dir, "evaluation_figure.png")
     )
 
     # ---- console output ----
